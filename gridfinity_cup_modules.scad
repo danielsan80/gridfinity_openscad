@@ -193,7 +193,7 @@ module basic_cavity(num_x, num_y, num_z, fingerslide=default_fingerslide,
   facets = 13;
   mag_ht = magnet_diameter > 0 ? 2.4: 0;
   m3_ht = screw_depth;
-  efloor = efficient_floor && magnet_diameter == 0 && screw_depth == 0 && !fingerslide;
+  efloor = efficient_floor && magnet_diameter == 0 && screw_depth == 0;
   seventeen = gridfinity_pitch/2-4;
   
   floorht = max(mag_ht, m3_ht, part_ht) + floor_thickness;
@@ -205,111 +205,115 @@ module basic_cavity(num_x, num_y, num_z, fingerslide=default_fingerslide,
   
   difference() {
     union() {
-      // cut out inside edge of standard lip
-      hull() cornercopy(seventeen, num_x, num_y) {
-        tz(zpoint-eps) cylinder(d=2.3, h=inner_lip_ht+2*eps, $fn=24); // lip
+      difference() {
+        union() {
+          // cut out inside edge of standard lip
+          hull() cornercopy(seventeen, num_x, num_y) {
+            tz(zpoint-eps) cylinder(d=2.3, h=inner_lip_ht+2*eps, $fn=24); // lip
+          }
+          
+          hull() cornercopy(seventeen, num_x, num_y) {
+            // create bevels below the lip
+            if (lip_style3 == "reduced") {
+              tz(zpoint+1.8) cylinder(d=3.7, h=0.1, $fn=32); // transition from lip (where top of lip would be) ...
+              // radius increases by (2.3+2*q-3.7)/2 = q-1.4/2 = q-0.7
+              tz(zpoint-(q-0.7)+1.9-q2) cylinder(d=2.3+2*q, h=q2, $fn=32);   // ... to top of thin wall ...
+            }
+            else if (lip_style3 == "none") {
+              tz(zpoint) cylinder(d=2.3+2*q, h=6, $fn=32);   // remove entire lip
+            }
+            else {// normal
+              tz(zpoint-0.1) cylinder(d=2.3, h=0.1, $fn=24);       // transition from lip ...
+              tz(zpoint-q-q2) cylinder(d=2.3+2*q, h=q2, $fn=32);   // ... to top of thin wall ...
+            }
+            // create rounded bottom of bowl (8.5 is high enough to not expose gaps)
+            tz(2.3/2+q+floorht) sphere(d=2.3+2*q, $fn=32);       // .. to bottom of thin wall and floor
+            tz(2.3/2+q+floorht) mirror([0, 0, 1]) cylinder(d1=2.3+2*q, d2=0, h=1.15+q, $fn=32);
+          }
+        }
       }
       
-      hull() cornercopy(seventeen, num_x, num_y) {
-        // create bevels below the lip
-        if (lip_style3 == "reduced") {
-          tz(zpoint+1.8) cylinder(d=3.7, h=0.1, $fn=32); // transition from lip (where top of lip would be) ...
-          // radius increases by (2.3+2*q-3.7)/2 = q-1.4/2 = q-0.7
-          tz(zpoint-(q-0.7)+1.9-q2) cylinder(d=2.3+2*q, h=q2, $fn=32);   // ... to top of thin wall ...
+      
+      // cut away side lips if num_x is less than 1
+      if (num_x < 1) {
+        hull() for (x=[-gridfinity_pitch/2+1.5+0.25+wall_thickness, -gridfinity_pitch/2+num_x*gridfinity_pitch-1.5-0.25-wall_thickness])
+        for (y=[-10, (num_y-0.5)*gridfinity_pitch-seventeen])
+        translate([x, y, (floorht+7*num_z)/2])
+          cylinder(d=3, h=7*num_z, $fn=24);
+      }
+      
+      if (efloor) {
+        if (num_x < 1) {
+          gridcopy(1, num_y) {
+            tz(floor_thickness) intersection() {
+              hull() cornercopy(seventeen-0.5) cylinder(r=1, h=5, $fn=32);
+              translate([gridfinity_pitch*(-1+num_x), 0, 0]) hull() cornercopy(seventeen-0.5) cylinder(r=1, h=5, $fn=32);
+            }
+            
+            // tapered top portion
+            intersection() {
+              hull() {
+                tz(3) cornercopy(seventeen-0.5) cylinder(r=1, h=1, $fn=32);
+                tz(5) cornercopy(seventeen+2.5-1.15-q) cylinder(r=1.15+q, h=4, $fn=32);
+              }
+              translate([gridfinity_pitch*(-1+num_x), 0, 0]) hull() {
+                tz(3) cornercopy(seventeen-0.5) cylinder(r=1, h=1, $fn=32);
+                tz(5) cornercopy(seventeen+2.5-1.15-q) cylinder(r=1.15+q, h=4, $fn=32);
+              }
+            }
+          }
         }
-        else if (lip_style3 == "none") {
-          tz(zpoint) cylinder(d=2.3+2*q, h=6, $fn=32);   // remove entire lip
+        else {
+          if (half_pitch) {
+            // establishes floor
+            gridcopy(num_x, num_y, half_pitch=half_pitch) hull() tz(floor_thickness) cornercopy(seventeen-0.5-gridfinity_pitch/4) cylinder(r=1, h=5, $fn=32);
+            
+            // tapered top portion
+            gridcopy(num_x, num_y, half_pitch=half_pitch) hull() {
+              tz(3) cornercopy(seventeen-0.5-gridfinity_pitch/4) cylinder(r=1, h=1, $fn=32);
+              tz(5-(+2.5-1.15-q)) cornercopy(seventeen-gridfinity_pitch/4) cylinder(r=1.15+q, h=4, $fn=32);
+            }
+          } else {
+            // establishes floor
+            gridcopy(num_x, num_y) hull() tz(floor_thickness) cornercopy(seventeen-0.5) cylinder(r = 1, h = 5, $fn =
+            32);
+            
+            // tapered top portion
+            gridcopy(num_x, num_y) hull() {
+              tz(3) cornercopy(seventeen-0.5) cylinder(r=1, h=1, $fn=32);
+              tz(5-(+2.5-1.15-q)) cornercopy(seventeen) cylinder(r=1.15+q, h=4, $fn=32);
+            }
+          }
+          // cleanup floor difference overhangs
+          hull()
+          cornercopy(seventeen, num_x, num_y) {
+            tz(floorht) cylinder(d=2.3+2*q, h=2.3+2*q, $fn=24);
+          }
         }
-        else {  // normal
-          tz(zpoint-0.1) cylinder(d=2.3, h=0.1, $fn=24);       // transition from lip ...
-          tz(zpoint-q-q2) cylinder(d=2.3+2*q, h=q2, $fn=32);   // ... to top of thin wall ...
-        }
-        // create rounded bottom of bowl (8.5 is high enough to not expose gaps)
-        tz(2.3/2+q+floorht) sphere(d=2.3+2*q, $fn=32);       // .. to bottom of thin wall and floor
-        tz(2.3/2+q+floorht) mirror([0, 0, 1]) cylinder(d1=2.3+2*q, d2=0, h=1.15+q, $fn=32);
       }
     }
     
+    pivot_z_offset = efloor? -floorht+0.7 : 0;
     // cut away from the negative to leave behind wall to make it easier to remove piece
-    pivot_z = 13.6-0.45+floorht-5+seventeen-17;
+    pivot_z = 13.6-0.45+floorht-5+seventeen-17+pivot_z_offset;
     pivot_y = -10;
     
     // rounded inside bottom
-    if(fingerslide){
-      for (ai=[0:facets-1])
-        // normal slide position is -seventeen-1.15 which is the edge of the inner lip
-        // reduced slide position is -seventeen-1.85 which is the edge of the upper lip
-        // no lip means we need -gridfinity_pitch/2+1.5+0.25+wall_thickness ?
-        translate([0, (
-          lip_style3 == "reduced" ? -0.7
-          : (lip_style3=="none" ? seventeen+1.15-gridfinity_pitch/2+0.25+wall_thickness
-          : 0
-          ) ), 0])
+    if (fingerslide) {
+      for (ai = [0:facets-1])
+      // normal slide position is -seventeen-1.15 which is the edge of the inner lip
+      // reduced slide position is -seventeen-1.85 which is the edge of the upper lip
+      // no lip means we need -gridfinity_pitch/2+1.5+0.25+wall_thickness ?
+      translate([0, (
+        lip_style3 == "reduced" ? -0.7
+        : (lip_style3 == "none" ? seventeen+1.15-gridfinity_pitch/2+0.25+wall_thickness
+        : 0
+      )), 0])
         translate([0, pivot_y, pivot_z])
-        rotate([90*ai/(facets-1), 0, 0])
+        rotate([90 * ai/(facets-1), 0, 0])
         translate([0, -pivot_y, -pivot_z])
         translate([-gridfinity_pitch/2, -10-seventeen-1.15, 0])
-        cube([gridfinity_pitch*num_x, 10, gridfinity_zpitch*num_z+5]);
-    }
-  }
-  
-  // cut away side lips if num_x is less than 1
-  if (num_x < 1) {
-    hull() for (x=[-gridfinity_pitch/2+1.5+0.25+wall_thickness, -gridfinity_pitch/2+num_x*gridfinity_pitch-1.5-0.25-wall_thickness])
-    for (y=[-10, (num_y-0.5)*gridfinity_pitch-seventeen])
-    translate([x, y, (floorht+7*num_z)/2])
-    cylinder(d=3, h=7*num_z, $fn=24);
-  }
-  
-  if (efloor) {
-    if (num_x < 1) {
-      gridcopy(1, num_y) {
-        tz(floor_thickness) intersection() {
-          hull() cornercopy(seventeen-0.5) cylinder(r=1, h=5, $fn=32);
-          translate([gridfinity_pitch*(-1+num_x), 0, 0]) hull() cornercopy(seventeen-0.5) cylinder(r=1, h=5, $fn=32);
-        }
-      
-        // tapered top portion
-        intersection() {
-          hull() {
-            tz(3) cornercopy(seventeen-0.5) cylinder(r=1, h=1, $fn=32);
-            tz(5) cornercopy(seventeen+2.5-1.15-q) cylinder(r=1.15+q, h=4, $fn=32);
-          }
-          translate([gridfinity_pitch*(-1+num_x), 0, 0]) hull() {
-            tz(3) cornercopy(seventeen-0.5) cylinder(r=1, h=1, $fn=32);
-            tz(5) cornercopy(seventeen+2.5-1.15-q) cylinder(r=1.15+q, h=4, $fn=32);
-          }
-        }
-      }
-    }
-    else {
-      if (half_pitch) {
-        // establishes floor
-        gridcopy(num_x, num_y, half_pitch=half_pitch) hull() {
-          tz(floor_thickness) cornercopy(seventeen-0.5-gridfinity_pitch/4) cylinder(r=1, h=5, $fn=32);
-        }
-        
-        // tapered top portion
-        gridcopy(num_x, num_y, half_pitch=half_pitch) hull() {
-          tz(3) cornercopy(seventeen-0.5-gridfinity_pitch/4) cylinder(r=1, h=1, $fn=32);
-          tz(5-(+2.5-1.15-q)) cornercopy(seventeen-gridfinity_pitch/4) cylinder(r=1.15+q, h=4, $fn=32);
-        }
-      } else {
-        // establishes floor
-        gridcopy(num_x, num_y) hull() tz(floor_thickness) cornercopy(seventeen-0.5) cylinder(r=1, h=5, $fn=32);
-        
-        // tapered top portion
-        gridcopy(num_x, num_y) hull() {
-          tz(3) cornercopy(seventeen-0.5) cylinder(r=1, h=1, $fn=32);
-          tz(5-(+2.5-1.15-q)) cornercopy(seventeen) cylinder(r=1.15+q, h=4, $fn=32);
-        }
-      }
-      
-      // cleanup floor difference overhangs
-      hull()
-      cornercopy(seventeen, num_x, num_y) {
-        tz(floorht) cylinder(d=2.3+2*q, h=2.3+2*q, $fn=24);
-      }
+        cube([gridfinity_pitch * num_x, 10, gridfinity_zpitch * num_z+5]);
     }
   }
 }
